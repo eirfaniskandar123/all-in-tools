@@ -104,19 +104,19 @@ export function layout(src: { width: number; height: number }, w: number, h: num
   };
 }
 
-const halvingCache = new WeakMap<HTMLImageElement, HTMLCanvasElement[]>();
+const halvingCache = new WeakMap<object, HTMLCanvasElement[]>();
 
 /** Downscale raster images in halving steps so small icons stay sharp instead of aliased. */
-function scaledSource(src: Source, dw: number, dh: number): CanvasImageSource {
-  if (src.isSvg) return src.img;
-  let levels = halvingCache.get(src.img);
+function scaledSource(img: HTMLImageElement | HTMLCanvasElement, iw: number, ih: number, dw: number, dh: number, vector: boolean): CanvasImageSource {
+  if (vector) return img;
+  let levels = halvingCache.get(img);
   if (!levels) {
     levels = [];
-    halvingCache.set(src.img, levels);
+    halvingCache.set(img, levels);
   }
-  let cur: CanvasImageSource = src.img;
-  let cw = src.width;
-  let ch = src.height;
+  let cur: CanvasImageSource = img;
+  let cw = iw;
+  let ch = ih;
   let i = 0;
   while (cw / 2 >= dw && ch / 2 >= dh && cw > 2 && ch > 2) {
     if (!levels[i]) {
@@ -132,6 +132,118 @@ function scaledSource(src: Source, dw: number, dh: number): CanvasImageSource {
     i++;
   }
   return cur;
+}
+
+export interface Artwork {
+  /** Source with its solid background made transparent. */
+  canvas: HTMLCanvasElement;
+  /** Detected background colour, e.g. "#4ADE80". */
+  background: string;
+  /** Share of the image that is artwork (0–1). */
+  coverage: number;
+}
+
+const artworkCache = new WeakMap<HTMLImageElement, Artwork | null>();
+
+/**
+ * Monochrome icons (tab bar, toolbar, notification) are made from the image's shape.
+ * If the image has no transparency, its shape is the whole square. In that case,
+ * detect the solid background colour from the border pixels and key it out,
+ * so only the artwork is tinted. Returns null when the image already has transparency.
+ */
+export function extractArtwork(src: Source): Artwork | null {
+  if (artworkCache.has(src.img)) return artworkCache.get(src.img) ?? null;
+  const k = Math.min(1, 1024 / Math.max(src.width, src.height));
+  const c = makeCanvas(src.width * k, src.height * k);
+  const x = ctx2d(c);
+  x.drawImage(src.img, 0, 0, c.width, c.height);
+  const img = x.getImageData(0, 0, c.width, c.height);
+  const d = img.data;
+  const W = c.width;
+  const H = c.height;
+
+  // Sample a 2 px border.
+  const border: number[] = [];
+  for (let y = 0; y < H; y++) {
+    for (let xx = 0; xx < W; xx++) {
+      if (xx > 1 && xx < W - 2 && y > 1 && y < H - 2) continue;
+      border.push((y * W + xx) * 4);
+    }
+  }
+  const clear = border.filter((i) => d[i + 3] < 16).length;
+  if (clear / border.length > 0.3) {
+    artworkCache.set(src.img, null);
+    return null;
+  }
+
+  // Most common border colour (quantised) is the background.
+  const counts = new Map<number, { n: number; r: number; g: number; b: number }>();
+  for (const i of border) {
+    if (d[i + 3] < 128) continue;
+    const key = ((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4);
+    const e = counts.get(key) ?? { n: 0, r: 0, g: 0, b: 0 };
+    e.n++;
+    e.r += d[i];
+    e.g += d[i + 1];
+    e.b += d[i + 2];
+    counts.set(key, e);
+  }
+  const top = [...counts.values()].sort((a, b) => b.n - a.n)[0];
+  if (!top) {
+    artworkCache.set(src.img, null);
+    return null;
+  }
+  const br = top.r / top.n;
+  const bg = top.g / top.n;
+  const bb = top.b / top.n;
+
+  // Alpha from colour distance to the background, with a soft edge for anti-aliasing.
+  const LO = 28;
+  const HI = 70;
+  let art = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    const dist = Math.hypot(d[i] - br, d[i + 1] - bg, d[i + 2] - bb);
+    const t = Math.min(1, Math.max(0, (dist - LO) / (HI - LO)));
+    const a = Math.round(t * d[i + 3]);
+    d[i + 3] = a;
+    if (a > 128) art++;
+  }
+  x.putImageData(img, 0, 0);
+
+  // Trim to the artwork's bounding box so the glyph fills the icon like a real template icon.
+  let minX = W;
+  let minY = H;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < H; y++) {
+    for (let xx = 0; xx < W; xx++) {
+      if (d[(y * W + xx) * 4 + 3] > 128) {
+        if (xx < minX) minX = xx;
+        if (xx > maxX) maxX = xx;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  let out = c;
+  if (maxX >= minX && maxY >= minY) {
+    const pad = Math.round(Math.max(maxX - minX, maxY - minY) * 0.02);
+    const sx = Math.max(0, minX - pad);
+    const sy = Math.max(0, minY - pad);
+    const sw = Math.min(W, maxX + pad + 1) - sx;
+    const sh = Math.min(H, maxY + pad + 1) - sy;
+    out = makeCanvas(sw, sh);
+    ctx2d(out).drawImage(c, sx, sy, sw, sh, 0, 0, sw, sh);
+  }
+
+  const hex = (v: number) => Math.round(v).toString(16).padStart(2, "0");
+  const result: Artwork = {
+    canvas: out,
+    background: `#${hex(br)}${hex(bg)}${hex(bb)}`.toUpperCase(),
+    coverage: art / (W * H),
+  };
+  artworkCache.set(src.img, result);
+  return result;
 }
 
 function clipShape(ctx: CanvasRenderingContext2D, w: number, h: number, r: number, circle?: boolean) {
@@ -158,7 +270,14 @@ export function drawIcon(src: Source, w: number, h: number, s: EditSettings, p?:
   const l = ctx2d(layer);
   l.imageSmoothingEnabled = true;
   l.imageSmoothingQuality = "high";
-  l.drawImage(scaledSource(src, L.dw, L.dh), L.dx, L.dy, L.dw, L.dh);
+  // Tinted icons use the artwork shape only (solid backgrounds are keyed out).
+  const art = e.tint ? extractArtwork(src) : null;
+  if (art) {
+    const A = layout(art.canvas, c.width, c.height, e);
+    l.drawImage(scaledSource(art.canvas, art.canvas.width, art.canvas.height, A.dw, A.dh, false), A.dx, A.dy, A.dw, A.dh);
+  } else {
+    l.drawImage(scaledSource(src.img, src.width, src.height, L.dw, L.dh, src.isSvg), L.dx, L.dy, L.dw, L.dh);
+  }
   if (e.tint) {
     l.globalCompositeOperation = "source-in";
     l.fillStyle = e.tint;
@@ -183,10 +302,13 @@ export function buildSvg(src: Source, w: number, h: number, s: EditSettings, p?:
     ? `<filter id="tint" filterUnits="userSpaceOnUse" x="0" y="0" width="${w}" height="${h}"><feFlood flood-color="${e.tint}"/><feComposite in2="SourceAlpha" operator="in"/></filter>`
     : "";
   const bg = e.background ? `<rect width="${w}" height="${h}" fill="${e.background}"/>` : "";
+  const art = e.tint ? extractArtwork(src) : null;
+  const href = art ? art.canvas.toDataURL("image/png") : src.dataUrl;
+  const G = art ? layout(art.canvas, w, h, e) : L;
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
     `<defs><clipPath id="clip">${clip}</clipPath>${filter}</defs>` +
-    `<g clip-path="url(#clip)">${bg}<image href="${esc(src.dataUrl)}" x="${n(L.dx)}" y="${n(L.dy)}" width="${n(L.dw)}" height="${n(L.dh)}" preserveAspectRatio="none"${e.tint ? ' filter="url(#tint)"' : ""}/></g></svg>`
+    `<g clip-path="url(#clip)">${bg}<image href="${esc(href)}" x="${n(G.dx)}" y="${n(G.dy)}" width="${n(G.dw)}" height="${n(G.dh)}" preserveAspectRatio="none"${e.tint ? ' filter="url(#tint)"' : ""}/></g></svg>`
   );
 }
 
@@ -216,18 +338,20 @@ export function analyze(src: Source, presets: Preset[], s: EditSettings): Warnin
     });
   }
 
-  const raw = makeCanvas(96, 96);
-  ctx2d(raw).drawImage(src.img, 0, 0, 96, 96);
-  const rp = pixels(raw);
-  let clear = 0;
-  for (let i = 3; i < rp.length; i += 4) if (rp[i] < 16) clear++;
-  const clearRatio = clear / (rp.length / 4);
   const mono = presets.filter((p) => p.forceTint);
-  if (mono.length && clearRatio < 0.04) {
-    out.push({
-      level: "warn",
-      text: `Your image has no transparent background, so ${mono.map((p) => p.name).join(", ")} will render as a solid block. Use a PNG or SVG with transparency.`,
-    });
+  const art = mono.length || s.tint ? extractArtwork(src) : null;
+  if (art) {
+    if (art.coverage < 0.005 || art.coverage > 0.9) {
+      out.push({
+        level: "warn",
+        text: `Couldn't separate the artwork from the background for ${mono.map((p) => p.name).join(", ") || "monochrome"}. Use a PNG or SVG with a transparent background.`,
+      });
+    } else {
+      out.push({
+        level: "info",
+        text: `Solid background (${art.background}) detected. Monochrome icons use only the artwork; the background is removed automatically.`,
+      });
+    }
   }
 
   const small = pixels(drawIcon(src, 24, 24, { ...s, background: null, tint: "#000000" }));

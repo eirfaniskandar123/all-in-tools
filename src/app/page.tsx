@@ -72,6 +72,7 @@ export default function Home() {
           <PlacementStep
             source={source}
             edit={edit}
+            exp={exp}
             selected={selected}
             onToggle={toggle}
             focused={focused}

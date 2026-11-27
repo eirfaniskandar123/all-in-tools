@@ -63,12 +63,23 @@ pos   = centred + offset × size        (offset is set by dragging)
 
 Every preview in the UI uses `drawIcon`, through `<IconImage>`. **What you see is exactly what is exported.**
 
+### 4b. Solid-background artwork (`render.extractArtwork`)
+
+Monochrome presets tint the image's alpha shape. An opaque image (e.g. a logo on a green square) would become a solid block, so when a tint applies:
+
+1. Sample a 2 px border. If more than 30% of it is transparent, the image already has transparency and is used as is.
+2. Otherwise, the most common (quantised) border colour is the background.
+3. Alpha = smooth ramp of the RGB distance to that colour (28 → 70), multiplied by the original alpha.
+4. Crop to the artwork's bounding box (plus 2%) so the glyph fills the icon like a real template icon.
+
+The result is cached per image and used by `drawIcon` and `buildSvg` whenever a tint is set.
+
 ### 5. Checks (`render.analyze`)
 
 | Check | How |
 | --- | --- |
 | Upscaling | Largest required size > smallest source dimension (raster only) |
-| No transparency | Fewer than 4% of pixels are transparent while a monochrome preset is selected |
+| Solid background | `extractArtwork` found a background colour: info notice. Warns if the artwork covers under 0.5% or over 90% of the image (keying failed) |
 | Thin lines | At 24 px, more than 60% of the visible pixels are only partly opaque (anti-aliased edges) |
 | Low contrast | WCAG contrast of the average artwork colour against #111827 and white is below 1.8 |
 | Opaque required | An app icon is selected and there is no background |

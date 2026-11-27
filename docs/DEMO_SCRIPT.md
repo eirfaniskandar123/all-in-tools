@@ -27,6 +27,7 @@ Open http://localhost:3000 in Chrome or Edge. Zoom the browser to 90% if the scr
 - Click **Try a sample logo**.
 - Point out the validation: "Vector image, every size will be sharp."
 - Optional: drop a small PNG (under 512 px) to show the **too small** warning with a tip.
+- Optional: drop a logo on a **solid-colour square** (no transparency). In Placement, the Tab bar, Toolbar and Notification cards still show a clean mark: the background is detected and removed automatically.
 
 ## 2. Placement (1 min)
 

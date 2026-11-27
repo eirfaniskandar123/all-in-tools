@@ -1,9 +1,11 @@
 "use client";
 
-import { Check, Plus, X } from "lucide-react";
+import { Check, FileType, FolderOpen, Info, Plus, Ruler, X } from "lucide-react";
 import { useState } from "react";
-import { CUSTOM_ID, PRESETS, customPreset, findPreset } from "@/lib/presets";
-import type { EditSettings, Preset, Size, Source } from "@/lib/types";
+import { planFiles } from "@/lib/export";
+import { CUSTOM_ID, PLATFORM_LABEL, PRESETS, customPreset, findPreset, presetSpecs } from "@/lib/presets";
+import { extractArtwork } from "@/lib/render";
+import type { EditSettings, ExportSettings, Preset, Size, Source } from "@/lib/types";
 import { IconImage } from "../IconImage";
 import { Button, Card, ImageAllInTag, checker, cx } from "../ui";
 
@@ -61,10 +63,99 @@ export function SizeChips({ sizes, onRemove }: { sizes: Size[]; onRemove: (i: nu
   );
 }
 
+const PLATFORM_STYLE: Record<Preset["platform"], string> = {
+  ios: "bg-slate-900 text-white",
+  android: "bg-emerald-100 text-emerald-800",
+  web: "bg-blue-100 text-blue-800",
+  other: "bg-slate-100 text-slate-700",
+};
+
+function PlatformBadge({ platform }: { platform: Preset["platform"] }) {
+  return (
+    <span className={cx("rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide", PLATFORM_STYLE[platform])}>
+      {PLATFORM_LABEL[platform]}
+    </span>
+  );
+}
+
+/** Tiny square showing the safe-zone margin as a dashed inner square. */
+function SafeZoneGlyph({ pct, size = 14 }: { pct: number; size?: number }) {
+  return (
+    <span className="relative inline-block shrink-0 rounded-[3px] bg-slate-200" style={{ width: size, height: size }}>
+      <span className="absolute rounded-[2px] border border-dashed border-orange-500" style={{ inset: `${Math.max(pct, 6)}%` }} />
+    </span>
+  );
+}
+
+function MaskGlyph({ p }: { p: Preset }) {
+  return (
+    <span
+      className={cx(
+        "inline-block h-3.5 w-3.5 shrink-0 border-2 border-slate-500",
+        p.clipCircle || p.previewMask === "circle" ? "rounded-full" : p.previewMask === "squircle" ? "rounded-[5px]" : "rounded-[1px]",
+      )}
+    />
+  );
+}
+
+function Swatch({ color }: { color?: string }) {
+  return color ? (
+    <span className="inline-block h-3.5 w-3.5 shrink-0 rounded-full border border-slate-300" style={{ background: color }} />
+  ) : (
+    <span className="inline-block h-3.5 w-3.5 shrink-0 rounded-full bg-[conic-gradient(#f43f5e,#f59e0b,#10b981,#3b82f6,#a855f7,#f43f5e)]" />
+  );
+}
+
+function FormatBadges({ formats }: { formats: string[] }) {
+  return (
+    <span className="flex flex-wrap gap-1">
+      {formats.map((f) => (
+        <span key={f} className="rounded bg-slate-100 px-1.5 py-px text-[10px] font-semibold text-slate-600">
+          {f}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function SpecRow({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+  return (
+    <>
+      <dt className="flex items-center gap-1.5 whitespace-nowrap text-slate-500">
+        <span className="grid w-4 place-items-center">{icon}</span>
+        {label}
+      </dt>
+      <dd className="flex min-w-0 items-center gap-1.5 font-medium text-slate-800">{children}</dd>
+    </>
+  );
+}
+
+function Thumb({ preset, source, edit, size }: { preset: Preset; source: Source; edit: EditSettings; size: number }) {
+  const custom = preset.id === CUSTOM_ID;
+  return (
+    <div
+      className={cx(
+        "grid shrink-0 place-items-center overflow-hidden rounded-xl",
+        custom ? "bg-amber-50" : preset.forceTint === "#FFFFFF" ? "bg-slate-800" : checker,
+        preset.previewMask === "squircle" && "squircle",
+        preset.previewMask === "circle" && "rounded-full",
+      )}
+      style={{ width: size, height: size }}
+    >
+      {custom ? (
+        <Plus className="h-6 w-6 text-amber-600" />
+      ) : (
+        <IconImage source={source} edit={edit} preset={preset} size={preset.previewMask === "none" ? Math.round(size * 0.72) : size} />
+      )}
+    </div>
+  );
+}
+
 function PresetCard({
   preset,
   selected,
   focused,
+  files,
   source,
   edit,
   onClick,
@@ -72,59 +163,79 @@ function PresetCard({
   preset: Preset;
   selected: boolean;
   focused: boolean;
+  files: number;
   source: Source;
   edit: EditSettings;
   onClick: () => void;
 }) {
-  const dark = preset.forceTint === "#FFFFFF";
   const custom = preset.id === CUSTOM_ID;
+  const spec = presetSpecs(preset);
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={selected}
       className={cx(
-        "group relative flex flex-col rounded-2xl border-2 bg-white p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md",
-        selected ? "border-blue-600 shadow-sm shadow-blue-600/20" : custom ? "border-dashed border-amber-300" : "border-slate-200",
+        "group flex flex-col rounded-2xl border-2 text-left transition hover:-translate-y-0.5 hover:shadow-md",
+        selected ? "border-blue-600 bg-blue-50/40 shadow-sm shadow-blue-600/20" : custom ? "border-dashed border-amber-300 bg-white" : "border-slate-200 bg-white",
         focused && "ring-4 ring-blue-100",
       )}
     >
-      <span
-        className={cx(
-          "absolute right-3 top-3 grid h-6 w-6 place-items-center rounded-md border-2 transition",
-          selected ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white",
-        )}
-      >
-        {selected && <Check className="h-4 w-4" strokeWidth={3} />}
-      </span>
-      <div
-        className={cx(
-          "mb-4 grid h-16 w-16 place-items-center overflow-hidden rounded-xl",
-          custom ? "bg-amber-50" : dark ? "bg-slate-800" : checker,
-          preset.previewMask === "squircle" && "squircle",
-          preset.previewMask === "circle" && "rounded-full",
-        )}
-      >
-        {custom ? (
-          <Plus className="h-7 w-7 text-amber-600" />
-        ) : (
-          <IconImage
-            source={source}
-            edit={edit}
-            preset={preset}
-            size={preset.previewMask === "none" ? 44 : 64}
-          />
-        )}
+      <div className="flex items-start gap-3 p-4 pb-3">
+        <Thumb preset={preset} source={source} edit={edit} size={52} />
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold leading-snug text-slate-900">{preset.name}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <PlatformBadge platform={preset.platform} />
+            {custom ? <ImageAllInTag /> : <span className="text-xs text-slate-500">{files} files</span>}
+          </div>
+        </div>
+        <span
+          className={cx(
+            "grid h-6 w-6 shrink-0 place-items-center rounded-md border-2 transition",
+            selected ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white group-hover:border-slate-400",
+          )}
+        >
+          {selected && <Check className="h-4 w-4" strokeWidth={3} />}
+        </span>
       </div>
-      <div className="font-semibold text-slate-900">{preset.name}</div>
-      <div className="mt-0.5 text-xs text-slate-500">{preset.summary}</div>
-      {custom && <ImageAllInTag className="mt-3 self-start" />}
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 border-t border-slate-100 px-4 py-3 text-xs">
+        <SpecRow icon={<Ruler className="h-3.5 w-3.5" />} label="Sizes">
+          <span className="truncate tabular-nums">{spec.sizesShort}</span>
+        </SpecRow>
+        <SpecRow icon={<SafeZoneGlyph pct={spec.safeZonePct} />} label="Safe zone">
+          {spec.safeZonePct}% margin
+        </SpecRow>
+        <SpecRow icon={<MaskGlyph p={preset} />} label="Mask">
+          <span className="truncate">{spec.mask}</span>
+        </SpecRow>
+        <SpecRow icon={<Swatch color={spec.colour.swatch} />} label="Colour">
+          <span className="truncate">{spec.colour.label}</span>
+        </SpecRow>
+        <SpecRow icon={<FileType className="h-3.5 w-3.5" />} label="Formats">
+          <FormatBadges formats={spec.formats} />
+        </SpecRow>
+      </dl>
     </button>
+  );
+}
+
+function DetailSection({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <section className="border-t border-slate-100 py-3.5">
+      <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {icon}
+        {title}
+      </h4>
+      <div className="text-sm text-slate-800">{children}</div>
+    </section>
   );
 }
 
 export function PlacementStep({
   source,
   edit,
+  exp,
   selected,
   onToggle,
   focused,
@@ -137,6 +248,7 @@ export function PlacementStep({
 }: {
   source: Source;
   edit: EditSettings;
+  exp: ExportSettings;
   selected: string[];
   onToggle: (id: string) => void;
   focused: string;
@@ -149,22 +261,40 @@ export function PlacementStep({
 }) {
   const all = [...PRESETS, customPreset(customSizes)];
   const fp = findPreset(focused, customSizes) ?? PRESETS[0];
-  const safe = Math.round(fp.safeZone * 100);
+  const spec = presetSpecs(fp);
+  const filesOf = (p: Preset) => planFiles([p], exp, false).length;
+  const art = selected.some((id) => PRESETS.find((p) => p.id === id)?.forceTint) ? extractArtwork(source) : null;
+
   return (
     <div className="fade-in space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Where will this icon be used?</h1>
-        <p className="mt-1 text-slate-600">Pick one or more placements. Each preset knows its sizes and rules.</p>
+        <p className="mt-1 text-slate-600">
+          Pick one or more placements. Each card shows its sizes, safe zone, mask, colour rule and formats. Click a card
+          to select it and see full details on the right.
+        </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      {art && (
+        <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Your image has a solid background
+            <span className="mx-1 inline-block h-3 w-3 translate-y-0.5 rounded-sm border border-blue-300" style={{ background: art.background }} />
+            {art.background}. Monochrome placements (Tab bar, Toolbar, Notification) automatically use only the artwork.
+          </span>
+        </div>
+      )}
+
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {all.map((p) => (
             <PresetCard
               key={p.id}
               preset={p}
               selected={selected.includes(p.id)}
               focused={focused === p.id}
+              files={filesOf(p)}
               source={source}
               edit={edit}
               onClick={() => {
@@ -175,51 +305,97 @@ export function PlacementStep({
           ))}
         </div>
 
-        <Card className="p-5">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="font-semibold text-slate-900">{fp.name} · preset details</h3>
-            {fp.imageAllIn && <ImageAllInTag />}
-          </div>
-          <p className="mt-2 text-sm text-slate-600">{fp.description}</p>
-          <dl className="mt-4 space-y-2 text-sm">
-            {fp.details.map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-4 border-b border-slate-100 pb-2 last:border-0">
-                <dt className="text-slate-500">{k}</dt>
-                <dd className="text-right font-medium text-slate-800">{v}</dd>
+        <Card className="p-5 lg:sticky lg:top-24">
+          <div className="flex items-start gap-3">
+            <Thumb preset={fp} source={source} edit={edit} size={48} />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-bold text-slate-900">{fp.name}</h3>
+                <PlatformBadge platform={fp.platform} />
               </div>
-            ))}
-          </dl>
-
-          {fp.id === CUSTOM_ID ? (
-            <div className="mt-5 space-y-3">
-              <SizeChips sizes={customSizes} onRemove={(i) => onCustomSizes(customSizes.filter((_, j) => j !== i))} />
-              <SizeAdder
-                onAdd={(s) => {
-                  if (!customSizes.some((c) => c.w === s.w && c.h === s.h)) onCustomSizes([...customSizes, s]);
-                  if (!selected.includes(CUSTOM_ID)) onToggle(CUSTOM_ID);
-                }}
-              />
+              <p className="mt-1 text-sm leading-relaxed text-slate-600">{fp.description}</p>
             </div>
-          ) : (
-            <div className="mt-5 flex flex-col items-center">
+          </div>
+          {fp.imageAllIn && <ImageAllInTag className="mt-3" />}
+
+          {fp.id !== CUSTOM_ID && (
+            <div className="mt-4 flex items-center gap-4 rounded-xl bg-slate-50 p-3">
               <div
                 className={cx(
-                  "relative grid h-40 w-40 place-items-center overflow-hidden",
+                  "relative grid h-28 w-28 shrink-0 place-items-center overflow-hidden",
                   fp.forceTint === "#FFFFFF" ? "bg-slate-800" : checker,
                   fp.previewMask === "squircle" && "squircle",
                   fp.previewMask === "circle" && "rounded-full",
                   fp.previewMask === "none" && "rounded-lg border border-slate-200",
                 )}
               >
-                <IconImage source={source} edit={edit} preset={fp} size={160} />
-                <div
-                  className="pointer-events-none absolute border-2 border-dashed border-orange-400"
-                  style={{ inset: `${safe}%` }}
-                />
+                <IconImage source={source} edit={edit} preset={fp} size={112} />
+                <div className="pointer-events-none absolute border-2 border-dashed border-orange-400" style={{ inset: `${spec.safeZonePct}%` }} />
               </div>
-              <span className="mt-2 text-xs font-medium text-orange-600">safe zone · {safe}% margin</span>
+              <p className="text-xs leading-relaxed text-slate-600">
+                <span className="font-semibold text-orange-600">Dashed line = safe zone.</span> Keep important artwork
+                inside it ({spec.safeZonePct}% margin). The outer shape shows the mask.
+              </p>
             </div>
           )}
+
+          <div className="mt-2">
+            <DetailSection icon={<Ruler className="h-3.5 w-3.5" />} title={`Sizes (${fp.sizes.length})`}>
+              {fp.id === CUSTOM_ID ? (
+                <div className="space-y-3">
+                  {customSizes.length === 0 && <p className="text-sm text-slate-500">No sizes yet. Add any width × height.</p>}
+                  <SizeChips sizes={customSizes} onRemove={(i) => onCustomSizes(customSizes.filter((_, j) => j !== i))} />
+                  <SizeAdder
+                    onAdd={(s) => {
+                      if (!customSizes.some((c) => c.w === s.w && c.h === s.h)) onCustomSizes([...customSizes, s]);
+                      if (!selected.includes(CUSTOM_ID)) onToggle(CUSTOM_ID);
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {spec.sizes.map((z, i) => (
+                    <span key={i} className="inline-flex items-baseline gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs">
+                      <span className="font-semibold tabular-nums text-slate-900">{z.px}</span>
+                      {z.note && <span className="text-slate-500">{z.note}</span>}
+                    </span>
+                  ))}
+                  {fp.ico && (
+                    <span className="inline-flex items-baseline gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs">
+                      <span className="font-semibold text-slate-900">ICO</span>
+                      <span className="text-slate-500">{fp.ico.sizes.join(" / ")}</span>
+                    </span>
+                  )}
+                </div>
+              )}
+            </DetailSection>
+            <div className="grid grid-cols-2 gap-x-4">
+              <DetailSection icon={<SafeZoneGlyph pct={spec.safeZonePct} size={13} />} title="Safe zone">
+                {spec.safeZonePct}% margin
+              </DetailSection>
+              <DetailSection icon={<MaskGlyph p={fp} />} title="Mask">
+                {spec.mask}
+              </DetailSection>
+              <DetailSection icon={<Swatch color={spec.colour.swatch} />} title="Colour">
+                {spec.colour.label}
+              </DetailSection>
+              <DetailSection icon={<FileType className="h-3.5 w-3.5" />} title="Formats">
+                <FormatBadges formats={spec.formats} />
+              </DetailSection>
+            </div>
+            {spec.folders.length > 0 && (
+              <DetailSection icon={<FolderOpen className="h-3.5 w-3.5" />} title="Saved in ZIP at">
+                <div className="space-y-1">
+                  {spec.folders.slice(0, 3).map((f) => (
+                    <code key={f} className="block truncate rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700">
+                      {f}
+                    </code>
+                  ))}
+                  {spec.folders.length > 3 && <span className="text-xs text-slate-500">+ {spec.folders.length - 3} more folders</span>}
+                </div>
+              </DetailSection>
+            )}
+          </div>
         </Card>
       </div>
 

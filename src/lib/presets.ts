@@ -47,11 +47,20 @@ export const PRESETS: Preset[] = [
     safeZone: 0.1,
     opaque: true,
     formats: ["png"],
-    sizes: [1024, 180, 167, 152, 120, 87, 80, 76, 58, 40].map((px) => ({
-      w: px,
-      h: px,
-      path: `ios/AppIcon.appiconset/icon-${px}`,
-    })),
+    sizes: (
+      [
+        [1024, "App Store"],
+        [180, "iPhone"],
+        [167, "iPad Pro"],
+        [152, "iPad"],
+        [120, "iPhone"],
+        [87, "Settings"],
+        [80, "Spotlight"],
+        [76, "iPad"],
+        [58, "Settings"],
+        [40, "Notification"],
+      ] as [number, string][]
+    ).map(([px, label]) => ({ w: px, h: px, label, path: `ios/AppIcon.appiconset/icon-${px}` })),
     details: [
       ["Sizes", "1024 px + 9 device sizes (40–180 px)"],
       ["Safe zone", "~10% margin"],
@@ -78,7 +87,7 @@ export const PRESETS: Preset[] = [
         label: d,
         path: `android/res/mipmap-${d}/ic_launcher`,
       })),
-      { w: 512, h: 512, path: "android/play-store-icon" },
+      { w: 512, h: 512, label: "Play Store", path: "android/play-store-icon" },
     ],
     details: [
       ["Sizes", "48–192 px (mdpi → xxxhdpi) + 512 px"],
@@ -99,11 +108,11 @@ export const PRESETS: Preset[] = [
     safeZone: 0.04,
     formats: ["png", "webp", "avif", "svg", "ico"],
     sizes: [
-      { w: 16, h: 16, path: "web/favicon-16" },
-      { w: 32, h: 32, path: "web/favicon-32" },
-      { w: 180, h: 180, path: "web/apple-touch-icon" },
-      { w: 192, h: 192, path: "web/icon-192" },
-      { w: 512, h: 512, path: "web/icon-512" },
+      { w: 16, h: 16, label: "Browser tab", path: "web/favicon-16" },
+      { w: 32, h: 32, label: "Browser tab", path: "web/favicon-32" },
+      { w: 180, h: 180, label: "Apple touch", path: "web/apple-touch-icon" },
+      { w: 192, h: 192, label: "PWA", path: "web/icon-192" },
+      { w: 512, h: 512, label: "PWA splash", path: "web/icon-512" },
     ],
     svgPath: "web/favicon",
     ico: { path: "web/favicon", sizes: [16, 32, 48] },
@@ -224,4 +233,66 @@ export function resolvePresets(ids: string[], customSizes: Size[]): Preset[] {
 
 export function findPreset(id: string, customSizes: Size[]): Preset | undefined {
   return id === CUSTOM_ID ? customPreset(customSizes) : PRESETS.find((p) => p.id === id);
+}
+
+export const PLATFORM_LABEL: Record<Preset["platform"], string> = {
+  ios: "iOS",
+  android: "Android",
+  web: "Web",
+  other: "Any",
+};
+
+export interface PresetSpecs {
+  /** Short size summary for cards, e.g. "25 · 50 · 75 px". */
+  sizesShort: string;
+  /** Every size with its label, e.g. "50 px · @2x". */
+  sizes: { px: string; note?: string }[];
+  safeZonePct: number;
+  mask: string;
+  colour: { label: string; swatch?: string };
+  formats: string[];
+  folders: string[];
+}
+
+/** Structured, human-readable facts about a preset for the Placement step. */
+export function presetSpecs(p: Preset): PresetSpecs {
+  const px = (s: Size) => (s.w === s.h ? `${s.w}` : `${s.w}×${s.h}`);
+  const uniq = [...new Set(p.sizes.map(px))];
+  const nums = p.sizes.filter((s) => s.w === s.h).map((s) => s.w).sort((a, b) => a - b);
+  let sizesShort: string;
+  if (!p.sizes.length) sizesShort = "Add your own";
+  else if (uniq.length <= 4) sizesShort = `${uniq.join(" · ")} px`;
+  else if (nums.length === p.sizes.length && nums[nums.length - 1] >= 512 && nums[nums.length - 2] < 512)
+    sizesShort = `${nums[0]}–${nums[nums.length - 2]} + ${nums[nums.length - 1]} px`;
+  else sizesShort = `${nums[0] ?? uniq[0]}–${nums[nums.length - 1] ?? uniq[uniq.length - 1]} px`;
+  if (p.ico) sizesShort += " + ICO";
+
+  const sizes = p.sizes.map((s) => ({
+    px: `${px(s)} px`,
+    note: s.scale ? `@${s.scale}x` : s.label,
+  }));
+
+  const mask = p.clipCircle
+    ? "Circle (cut out)"
+    : p.previewMask === "squircle"
+      ? "Squircle, applied by iOS"
+      : p.previewMask === "circle"
+        ? "Circle, applied by device"
+        : "None (square)";
+
+  const colour = p.forceTint
+    ? { label: `Monochrome ${p.forceTint === "#FFFFFF" ? "white" : p.forceTint === "#000000" ? "black" : "dark"}`, swatch: p.forceTint }
+    : p.opaque
+      ? { label: "Full colour, opaque" }
+      : { label: "Full colour" };
+
+  return {
+    sizesShort,
+    sizes,
+    safeZonePct: Math.round(p.safeZone * 100),
+    mask,
+    colour,
+    formats: p.formats.map((f) => f.toUpperCase()),
+    folders: [...new Set(p.sizes.map((s) => s.path.split("/").slice(0, -1).join("/") + "/"))],
+  };
 }

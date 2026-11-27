@@ -18,13 +18,19 @@ Icon Refactor walks you through four steps. The step indicator at the top shows 
 
 ## 2 · Placement
 
-Click a card to select or deselect it. Several can be selected. The card you clicked last is described in the **preset details** panel:
+Click a card to select or deselect it. Several can be selected. Every card shows the key facts at a glance: platform badge (iOS, Android, Web, Any), number of files, **sizes**, **safe zone** (with a small dashed-square icon), **mask**, **colour rule** (with a colour dot) and **formats**.
 
-- **Sizes** generated for that placement
+The card you clicked last is described in more depth in the **preset details** panel:
+
+- a large preview with the mask shape and the dashed safe zone
+- **Sizes**: every size as a chip with what it's for (e.g. `50 px @2x`, `180 px iPhone`, `512 px Play Store`)
 - **Safe zone**: the margin the artwork should stay inside (dashed orange square in the preview)
 - **Mask**: how the platform will crop it (square, squircle or circle)
 - **Colour / background** rules, e.g. monochrome template or must be opaque
 - **Formats** that placement supports
+- **Saved in ZIP at**: the folder the files go to
+
+**Images with a solid background:** monochrome placements (Tab bar, Toolbar, Notification) are made from the shape of your artwork. If your image has no transparency, for example a logo on a solid green square, Icon Refactor detects the background colour from the image edges, removes it, and crops to the artwork for those placements. A blue notice shows the detected colour. Full-colour placements (app icons, favicon, avatar) keep the original image.
 
 **Custom size** (*from Image All-in*): type a width and height and click **Add**. Sizes appear as chips; click ✕ to remove one. The same list appears as **Extra sizes** in the Export step.
 
