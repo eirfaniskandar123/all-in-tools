@@ -10,6 +10,7 @@ export function IconImage({
   edit,
   preset,
   size,
+  height,
   className,
   style,
   scale = 2,
@@ -18,14 +19,16 @@ export function IconImage({
   edit: EditSettings;
   preset?: Preset;
   size: number;
+  /** Height for non-square icons (defaults to size). */
+  height?: number;
   className?: string;
   style?: React.CSSProperties;
   scale?: number;
 }) {
   const url = useMemo(
-    () => drawIcon(source, size * scale, size * scale, edit, preset).toDataURL("image/png"),
-    [source, edit, preset, size, scale],
+    () => drawIcon(source, size * scale, (height ?? size) * scale, edit, preset).toDataURL("image/png"),
+    [source, edit, preset, size, height, scale],
   );
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} width={size} height={size} alt="" className={className} style={style} draggable={false} />;
+  return <img src={url} width={size} height={height ?? size} alt="" className={className} style={style} draggable={false} />;
 }

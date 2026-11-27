@@ -38,35 +38,61 @@ The footer shows how many files will be generated.
 
 ## 3 · Edit
 
-Edits apply to every placement at once.
+Edits apply to every placement at once. The screen has three columns: **Tools**, the **big preview** with **Checks** below it, and the **Live preview**.
 
-| Control | Effect |
+### Tools
+
+| Section | Controls |
 | --- | --- |
-| **Crop: Fit / Fill** | Fit shows the whole image; Fill covers the whole icon (edges may be cropped) |
-| **Zoom** | 50–200% |
-| **Drag the image** | Move it inside the icon. **Re-centre** resets position and zoom |
-| **Padding** | Space around the artwork (0–30%) |
-| **Corner radius** | Rounds the icon's corners (0–50%) |
-| **Background** | Transparent, white, navy, blue, amber or any custom colour |
-| **Tint → Monochrome** | Recolours the artwork with one colour |
+| **Framing** | **Fit** (whole image inside the icon) or **Fill** (covers the icon, edges may be cropped). **Zoom** 50–200% |
+| **Spacing & shape** | **Padding** (0–30%) and **Corner radius** (0–50%). Each slider shows its value |
+| **Background** | Transparent, White, Navy, Blue, Amber or any custom colour. The selected one is named below the swatches |
+| **Tint** | **Monochrome** recolours the artwork with one colour |
 
-Some rules are always enforced by the platform:
+**Colour per placement** (under Tint) lists every selected placement and the colour it will get:
 
-- **Tab bar, Toolbar, Notification** are always monochrome and transparent.
-- **iOS and Android app icons** are always opaque. White is used if you choose no background.
-- **Avatar** is always clipped to a circle.
+- **Your tint**: Toolbar and all full-colour placements follow the colour you pick. Toolbar defaults to dark when Monochrome is off.
+- **🔒 Locked**: **Tab bar** is always a black template, because iOS recolours tab icons itself. **Notification** is always white, because that's Android's rule.
+- **Full colour**: Monochrome is off, so the original image is used.
 
-**Preview as** switches the big canvas between your selected placements, showing that placement's mask and safe zone.
+Other platform rules: app icons are always opaque (white if you pick no background), and Avatar is always a circle.
 
-**Live preview** shows the icon in an iOS tab bar (active state), on a phone home screen and in a browser tab.
+### Big preview
 
-**Checks** warn you about:
+- The **placement chips** above the canvas pick which selected placement to preview. The canvas shows its mask and the dashed **safe zone**.
+- **Drag the image** to move it. **Re-centre** resets position and zoom.
+- The strip below shows that placement's **sizes, safe zone, mask and colour**.
 
-- the image being upscaled beyond its real resolution
-- no transparent background (monochrome presets would become a solid block)
-- lines too thin to read at 24 px
-- low contrast on dark or light backgrounds
-- app icons needing an opaque background
+### Checks
+
+Every check is shown with a clear status. The header summarises it, e.g. "1 warning · 2 notes · 4 passed".
+
+| Check | Warns when | One-click fix |
+| --- | --- | --- |
+| Resolution | The image is smaller than the largest size needed | — |
+| Background | A solid background was found and removed for monochrome icons (note), or couldn't be removed (warning) | — |
+| **Safe zone** | Artwork goes past the dashed safe-zone line of any selected placement (shown as chips) | **Fit inside safe zone** |
+| Detail at 24 px | Lines are too thin to read when small | **Zoom in to 120%** |
+| Contrast | Transparent artwork is hard to see on dark or light backgrounds | **Use white / navy background** |
+| App icon background | App icons need an opaque background; white is used | **Use blue background** |
+| Locked colours | Your tint doesn't apply to Tab bar or Notification | — |
+
+Warnings come first (amber), then notes (blue). Passed checks are grouped in a green row you can expand.
+
+### Live preview
+
+Shows **only the placements you selected**, each in a realistic mock-up:
+
+- **Tab bar:** iOS light and dark tab bars, with the active icon tinted iOS blue.
+- **App icon · iOS:** a home screen with the squircle mask.
+- **App icon · Android:** a launcher with the circle mask.
+- **Favicon:** a browser tab and bookmark bar.
+- **Toolbar:** toolbar buttons.
+- **Notification:** an Android status bar and a notification.
+- **Avatar:** a comment row.
+- **Custom size:** every custom size.
+
+Click a mock-up to show that placement in the big preview.
 
 **Undo / Redo / Reset** are in the footer.
 

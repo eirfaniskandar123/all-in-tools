@@ -19,6 +19,7 @@ export const PRESETS: Preset[] = [
     previewMask: "none",
     safeZone: 0.08,
     forceTint: "#000000",
+    tintLocked: true,
     transparent: true,
     formats: ["png", "svg"],
     sizes: [1, 2, 3].map((s) => ({
@@ -160,6 +161,7 @@ export const PRESETS: Preset[] = [
     previewMask: "none",
     safeZone: 0.08,
     forceTint: "#FFFFFF",
+    tintLocked: true,
     transparent: true,
     formats: ["png", "webp"],
     sizes: DENSITIES.map(([d, m]) => ({
@@ -281,7 +283,9 @@ export function presetSpecs(p: Preset): PresetSpecs {
         : "None (square)";
 
   const colour = p.forceTint
-    ? { label: `Monochrome ${p.forceTint === "#FFFFFF" ? "white" : p.forceTint === "#000000" ? "black" : "dark"}`, swatch: p.forceTint }
+    ? p.tintLocked
+      ? { label: `Monochrome ${p.forceTint === "#FFFFFF" ? "white" : "black"} (locked)`, swatch: p.forceTint }
+      : { label: "Monochrome · your tint", swatch: p.forceTint }
     : p.opaque
       ? { label: "Full colour, opaque" }
       : { label: "Full colour" };

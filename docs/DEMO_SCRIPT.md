@@ -42,8 +42,9 @@ Open http://localhost:3000 in Chrome or Edge. Zoom the browser to 90% if the scr
 - **Drag** the image, change **Zoom** and **Padding**, then pick the **blue background**.
 - Watch the **Live preview**: active tab bar icon, phone home screen with the iOS squircle, browser tab favicon.
 - Switch **Preview as** to *App icon · Android* to show the circle mask and safe zone.
-- Toggle **Monochrome**, then **Undo** to show history.
-- Point at **Checks**: the warnings are computed from the actual pixels (thin lines at 24 px, contrast, transparency).
+- Toggle **Monochrome** and pick a colour. Under **Colour per placement**, Toolbar follows it, while Tab bar (iOS) and Notification (Android) stay locked to their platform colours. Then **Undo**.
+- Set **Padding** to 0%. **Checks** shows "Artwork outside the safe zone" with the affected placements. Click **Fit inside safe zone** to fix it in one click.
+- The **Live preview** only shows the placements you picked. Click one to load it in the big preview.
 
 ## 4. Export (1 min 30 s)
 

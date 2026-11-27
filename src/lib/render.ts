@@ -79,7 +79,7 @@ export async function loadSource(file: Blob, name: string): Promise<Source> {
 export function effectiveSettings(s: EditSettings, p?: Preset): EditSettings {
   if (!p) return s;
   const out = { ...s };
-  if (p.forceTint) out.tint = p.forceTint;
+  if (p.forceTint) out.tint = p.tintLocked ? p.forceTint : s.tint ?? p.forceTint;
   if (p.transparent) out.background = null;
   if (p.opaque && !out.background) out.background = "#FFFFFF";
   return out;
@@ -326,34 +326,102 @@ function luminance(r: number, g: number, b: number): number {
 
 const contrast = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
-/** Quality checks shown in the Edit step. */
+function alphaBox(c: HTMLCanvasElement, threshold = 64) {
+  const px = pixels(c);
+  let minX = c.width;
+  let minY = c.height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < c.height; y++) {
+    for (let x = 0; x < c.width; x++) {
+      if (px[(y * c.width + x) * 4 + 3] > threshold) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  return maxX < 0 ? null : { minX, minY, maxX, maxY };
+}
+
+/**
+ * Quality checks shown in the Edit step. Returns one entry per check,
+ * including passed checks (level "ok"), so the UI can show what was verified.
+ */
 export function analyze(src: Source, presets: Preset[], s: EditSettings): Warning[] {
   const out: Warning[] = [];
+  if (!presets.length) return out;
+
+  // 1. Resolution
   const needed = presets.flatMap((p) => p.sizes.map((z) => ({ p, px: Math.max(z.w, z.h) })));
   const biggest = needed.sort((a, b) => b.px - a.px)[0];
-  if (!src.isSvg && biggest && biggest.px > Math.min(src.width, src.height)) {
+  if (src.isSvg) {
+    out.push({ id: "resolution", level: "ok", title: "Vector image", text: "SVG renders sharp at every size." });
+  } else if (biggest && biggest.px > Math.min(src.width, src.height)) {
+    const affected = [...new Set(needed.filter((n) => n.px > Math.min(src.width, src.height)).map((n) => n.p.name))];
     out.push({
+      id: "resolution",
       level: "warn",
-      text: `Source is ${src.width}×${src.height} px but ${biggest.p.name} needs ${biggest.px} px. It will be upscaled and may look soft. Use a bigger image or an SVG.`,
+      title: "Image will be upscaled",
+      text: `Your image is ${src.width}×${src.height} px but ${biggest.p.name} needs ${biggest.px} px, so it may look soft. Use a bigger image or an SVG.`,
+      presets: affected,
     });
+  } else {
+    out.push({ id: "resolution", level: "ok", title: "Sharp at every size", text: `${src.width}×${src.height} px is big enough for every selected placement.` });
   }
 
-  const mono = presets.filter((p) => p.forceTint);
-  const art = mono.length || s.tint ? extractArtwork(src) : null;
+  // 2. Background
+  const mono = presets.filter((p) => effectiveSettings(s, p).tint);
+  const art = mono.length ? extractArtwork(src) : null;
   if (art) {
     if (art.coverage < 0.005 || art.coverage > 0.9) {
       out.push({
+        id: "background",
         level: "warn",
-        text: `Couldn't separate the artwork from the background for ${mono.map((p) => p.name).join(", ") || "monochrome"}. Use a PNG or SVG with a transparent background.`,
+        title: "Couldn't separate the artwork",
+        text: "The background couldn't be removed cleanly, so monochrome icons may look like a block. Use a PNG or SVG with a transparent background.",
+        presets: mono.map((p) => p.name),
       });
     } else {
       out.push({
+        id: "background",
         level: "info",
-        text: `Solid background (${art.background}) detected. Monochrome icons use only the artwork; the background is removed automatically.`,
+        title: `Solid background ${art.background} removed`,
+        text: "Monochrome icons use only your artwork. Full-colour icons keep the original image.",
+        presets: mono.map((p) => p.name),
       });
     }
+  } else if (mono.length) {
+    out.push({ id: "background", level: "ok", title: "Transparent background", text: "Monochrome icons use your artwork's shape directly." });
   }
 
+  // 3. Safe zone: does the visible artwork stay inside each placement's safe margin?
+  const S = 128;
+  const outside: Preset[] = [];
+  for (const p of presets) {
+    const e = effectiveSettings(s, p);
+    if (!e.tint && extractArtwork(src) !== null) continue; // opaque image on a full-colour icon: the image is its own background
+    const box = alphaBox(drawIcon(src, S, S, { ...s, background: null }, { ...p, opaque: false }));
+    if (!box) continue;
+    const inset = p.safeZone * S - 1;
+    if (box.minX < inset || box.minY < inset || box.maxX > S - 1 - inset || box.maxY > S - 1 - inset) outside.push(p);
+  }
+  if (outside.length) {
+    const pad = Math.ceil(Math.max(...outside.map((p) => p.safeZone)) * 100 + 1) / 100;
+    out.push({
+      id: "safe-zone",
+      level: "warn",
+      title: "Artwork outside the safe zone",
+      text: "Parts of your artwork go past the dashed safe-zone line and may be cut off by masks or look cramped.",
+      presets: outside.map((p) => p.name),
+      action: { label: `Fit inside safe zone (padding ${Math.round(pad * 100)}%)`, patch: { padding: Math.min(0.3, pad), zoom: 1, offsetX: 0, offsetY: 0 } },
+    });
+  } else {
+    out.push({ id: "safe-zone", level: "ok", title: "Inside every safe zone", text: "Nothing will be cut off by platform masks." });
+  }
+
+  // 4. Thin detail at small sizes
   const small = pixels(drawIcon(src, 24, 24, { ...s, background: null, tint: "#000000" }));
   let any = 0;
   let partial = 0;
@@ -362,10 +430,19 @@ export function analyze(src: Source, presets: Preset[], s: EditSettings): Warnin
     if (small[i] > 25 && small[i] < 200) partial++;
   }
   if (any > 0 && partial / any > 0.6) {
-    out.push({ level: "warn", text: "Lines look too thin at 24 px. Zoom in, reduce padding, or simplify the artwork." });
+    out.push({
+      id: "detail",
+      level: "warn",
+      title: "Too thin at 24 px",
+      text: "Fine lines blur at small sizes. Zoom in, reduce padding, or simplify the artwork.",
+      action: { label: "Zoom in to 120%", patch: { zoom: Math.max(s.zoom, 1.2) } },
+    });
+  } else {
+    out.push({ id: "detail", level: "ok", title: "Readable at 24 px", text: "Details hold up at small sizes." });
   }
 
-  if (!s.background && !s.tint) {
+  // 5. Contrast (only meaningful for transparent, full-colour artwork)
+  if (!s.background && !s.tint && !extractArtwork(src)) {
     const px = pixels(drawIcon(src, 64, 64, { ...s, background: null }));
     let sum = 0;
     let n = 0;
@@ -377,18 +454,47 @@ export function analyze(src: Source, presets: Preset[], s: EditSettings): Warnin
     }
     if (n) {
       const L = sum / n;
-      if (contrast(L, luminance(17, 24, 39)) < 1.8)
-        out.push({ level: "warn", text: "Low contrast on a dark background (dark mode). Try the tint option or add a background." });
-      if (contrast(L, 1) < 1.8)
-        out.push({ level: "warn", text: "Low contrast on a white background. Try a darker tint or add a background." });
+      const dark = contrast(L, luminance(17, 24, 39)) < 1.8;
+      const light = contrast(L, 1) < 1.8;
+      if (dark || light) {
+        out.push({
+          id: "contrast",
+          level: "warn",
+          title: `Low contrast on ${dark && light ? "dark and light" : dark ? "dark" : "light"} backgrounds`,
+          text: dark
+            ? "Your icon may disappear in dark mode. Add a background or use the tint option."
+            : "Your icon may disappear on white. Add a background or use a darker tint.",
+          action: { label: dark ? "Use white background" : "Use navy background", patch: { background: dark ? "#FFFFFF" : "#0F172A" } },
+        });
+      } else {
+        out.push({ id: "contrast", level: "ok", title: "Good contrast", text: "Visible on both light and dark backgrounds." });
+      }
     }
   }
 
-  if (presets.some((p) => p.opaque) && !s.background) {
-    out.push({ level: "info", text: "App icons must be opaque, so white is used behind them. Pick a background colour to change it." });
+  // 6. Opaque app icons
+  const opaque = presets.filter((p) => p.opaque);
+  if (opaque.length && !s.background) {
+    out.push({
+      id: "opaque",
+      level: "info",
+      title: "White used behind app icons",
+      text: "App icons can't be transparent. Pick a background colour, or keep white.",
+      presets: opaque.map((p) => p.name),
+      action: { label: "Use blue background", patch: { background: "#2563EB" } },
+    });
   }
-  if (!out.some((w) => w.level !== "info")) {
-    out.unshift({ level: "info", text: "Looks good at every selected size." });
+
+  // 7. Locked tints
+  const locked = presets.filter((p) => p.tintLocked);
+  if (s.tint && locked.length) {
+    out.push({
+      id: "tint-locked",
+      level: "info",
+      title: "Some icons keep their platform colour",
+      text: "iOS tab bar icons stay black (iOS recolours them) and Android notification icons stay white. Your tint applies to everything else.",
+      presets: locked.map((p) => p.name),
+    });
   }
   return out;
 }

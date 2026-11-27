@@ -26,6 +26,8 @@ export interface Preset {
   safeZone: number;
   /** Monochrome template presets are always tinted with this colour. */
   forceTint?: string;
+  /** The platform requires forceTint; the user's tint is ignored (iOS tab bar, Android notification). */
+  tintLocked?: boolean;
   /** Background is always removed (template / notification icons). */
   transparent?: boolean;
   /** Background must be opaque (app icons). White is used if none is set. */
@@ -90,6 +92,12 @@ export interface GeneratedFile extends PlannedFile {
 }
 
 export interface Warning {
-  level: "info" | "warn" | "error";
+  id: string;
+  level: "ok" | "info" | "warn" | "error";
+  title: string;
   text: string;
+  /** Names of the placements this check is about. */
+  presets?: string[];
+  /** One-click fix that patches the edit settings. */
+  action?: { label: string; patch: Partial<EditSettings> };
 }

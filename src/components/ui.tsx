@@ -86,7 +86,7 @@ export function Slider({
     <label className="block">
       <div className="mb-1.5 flex items-center justify-between text-sm">
         <span className="font-medium text-slate-700">{label}</span>
-        <span className="tabular-nums text-slate-500">{display}</span>
+        <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-slate-700">{display}</span>
       </div>
       <input
         type="range"

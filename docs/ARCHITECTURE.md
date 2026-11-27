@@ -35,7 +35,8 @@ The user's edit settings are adjusted per preset:
 
 | Preset flag | Effect |
 | --- | --- |
-| `forceTint` | Monochrome template colour (Tab bar black, Toolbar #111827, Notification white) |
+| `forceTint` | Monochrome colour. Used as-is when `tintLocked`; otherwise it's the default and the user's tint wins (`s.tint ?? forceTint`) |
+| `tintLocked` | Platform-mandated colour: Tab bar black (iOS template), Notification white (Android) |
 | `transparent` | Background is removed |
 | `opaque` | White background if the user chose none (app icons) |
 | `clipCircle` | Output clipped to a circle (Avatar) |
@@ -76,13 +77,23 @@ The result is cached per image and used by `drawIcon` and `buildSvg` whenever a 
 
 ### 5. Checks (`render.analyze`)
 
+`analyze()` returns one `Warning` per check, **including passes**:
+
+```ts
+{ id, level: "ok" | "info" | "warn" | "error", title, text, presets?: string[], action?: { label, patch: Partial<EditSettings> } }
+```
+
+`ChecksPanel` shows warnings, then notes, then a collapsible group of passes. `action.patch` is applied with the normal edit handler, so fixes can be undone.
+
 | Check | How |
 | --- | --- |
-| Upscaling | Largest required size > smallest source dimension (raster only) |
-| Solid background | `extractArtwork` found a background colour: info notice. Warns if the artwork covers under 0.5% or over 90% of the image (keying failed) |
-| Thin lines | At 24 px, more than 60% of the visible pixels are only partly opaque (anti-aliased edges) |
-| Low contrast | WCAG contrast of the average artwork colour against #111827 and white is below 1.8 |
-| Opaque required | An app icon is selected and there is no background |
+| Resolution | Largest required size > smallest source dimension (raster only) |
+| Background | `extractArtwork` found a background colour: note. Warns if the artwork covers under 0.5% or over 90% of the image |
+| Safe zone | For each preset (skipping opaque images on full-colour presets), render 128 px with no background and find the alpha bounding box (alpha > 64). Warn if it crosses the `safeZone × 128` inset (1 px tolerance). The fix sets padding to the largest affected safe zone, with zoom 1 and offset 0 |
+| Thin lines | At 24 px, more than 60% of visible pixels are only partly opaque. The fix zooms to 120% |
+| Low contrast | Transparent, untinted artwork: WCAG contrast of its average colour against #111827 and white is below 1.8 |
+| Opaque required | An app icon is selected and no background is set |
+| Tint locked | The user set a tint while Tab bar or Notification is selected |
 
 ### 6. Encode (`encode.ts`)
 
