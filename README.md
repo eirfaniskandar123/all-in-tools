@@ -97,6 +97,15 @@ docs/                   Documentation (see below)
 - [Presets](docs/PRESETS.md): every placement, size and output path
 - [Architecture](docs/ARCHITECTURE.md): how processing works and how the core becomes a library
 - [Demo script](docs/DEMO_SCRIPT.md): a 5-minute walkthrough for presenting the tool
+- [Security review](docs/SECURITY_REVIEW.md): the pre-release security, privacy and legal checklist
+
+## Security, privacy and legal
+
+- Images are processed **only in your browser**. There are no uploads, cookies, analytics or third-party requests.
+- Strict security headers (CSP and others) are set in `next.config.ts`.
+- `npm audit`: 0 known vulnerabilities.
+- Pages: [Terms of Use](src/app/terms/page.tsx) (`/terms`) · [Privacy Policy](src/app/privacy/page.tsx) (`/privacy`)
+- [SECURITY.md](SECURITY.md) · [Security review](docs/SECURITY_REVIEW.md) · [LICENSE](LICENSE) (MIT) · [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 ## Tech stack
 

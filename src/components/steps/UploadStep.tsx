@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, ImageIcon, Sparkles, UploadCloud, XCircle } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { formatBytes, loadSource } from "@/lib/render";
 import type { Source } from "@/lib/types";
@@ -141,6 +142,10 @@ export function UploadStep({
             </Button>
           </div>
           <p className="mt-5 text-sm text-slate-500">PNG · JPG · SVG · WebP · at least 512 × 512 px</p>
+          <p className="mt-2 text-xs text-slate-400">
+            Only use images you have the rights to. By using this tool you agree to the{" "}
+            <Link href="/terms" className="underline hover:text-slate-600">Terms of Use</Link>.
+          </p>
           <input
             ref={input}
             type="file"

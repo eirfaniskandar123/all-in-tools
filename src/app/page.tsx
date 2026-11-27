@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Header, HelpPanel } from "@/components/Header";
 import { EditStep } from "@/components/steps/EditStep";
@@ -116,8 +117,13 @@ export default function Home() {
           />
         )}
       </main>
-      <footer className="mx-auto max-w-7xl px-6 pb-10 pt-4 text-center text-xs text-slate-400">
-        Icon Refactor · All-in Tools · Runs entirely in your browser. Images are never uploaded.
+      <footer className="mx-auto flex max-w-7xl flex-col items-center gap-2 px-6 pb-10 pt-4 text-center text-xs text-slate-400">
+        <p>Icon Refactor · All-in Tools · Runs entirely in your browser. Images are never uploaded.</p>
+        <nav className="flex gap-4">
+          <Link href="/terms" className="hover:text-slate-700 hover:underline">Terms of Use</Link>
+          <Link href="/privacy" className="hover:text-slate-700 hover:underline">Privacy Policy</Link>
+          <span>MIT License</span>
+        </nav>
       </footer>
     </div>
   );
